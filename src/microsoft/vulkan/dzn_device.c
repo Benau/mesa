@@ -22,6 +22,7 @@
  */
 
 #include "dzn_private.h"
+#include "wsi_common_entrypoints.h"
 
 #include "vk_alloc.h"
 #include "vk_common_entrypoints.h"
@@ -2988,4 +2989,25 @@ dzn_DestroySamplerYcbcrConversion(VkDevice device,
                                   const VkAllocationCallbacks *pAllocator)
 {
    unreachable("Ycbcr sampler conversion is not supported");
+}
+
+PUBLIC VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
+vkGetInstanceProcAddr(VkInstance instance,
+                      const char* pName)
+{
+   if (pName == NULL)
+      return NULL;
+
+#define LOOKUP_WSI_ENTRYPOINT(entrypoint) \
+   if (strcmp(pName, "vk" #entrypoint) == 0) \
+      return (PFN_vkVoidFunction)wsi_##entrypoint
+
+   LOOKUP_WSI_ENTRYPOINT(CreateWin32SurfaceKHR);
+   LOOKUP_WSI_ENTRYPOINT(DestroySurfaceKHR);
+   LOOKUP_WSI_ENTRYPOINT(GetPhysicalDeviceSurfaceCapabilitiesKHR);
+   LOOKUP_WSI_ENTRYPOINT(GetPhysicalDeviceSurfaceFormatsKHR);
+   LOOKUP_WSI_ENTRYPOINT(GetPhysicalDeviceSurfacePresentModesKHR);
+   LOOKUP_WSI_ENTRYPOINT(GetPhysicalDeviceSurfaceSupportKHR);
+
+   return dzn_GetInstanceProcAddr(instance, pName);
 }
