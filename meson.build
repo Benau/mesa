@@ -182,7 +182,9 @@ if dri_drivers.length() != 0
 endif
 
 gallium_drivers = get_option('gallium-drivers')
-if gallium_drivers.contains('auto')
+if gallium_drivers.contains('none')
+  gallium_drivers = []
+elif gallium_drivers.contains('auto')
   if system_has_kms_drm
     # TODO: PPC, Sparc
     if ['x86', 'x86_64'].contains(host_machine.cpu_family())
