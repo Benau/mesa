@@ -53,6 +53,25 @@ emit_load_state(struct tu_cs *cs, unsigned opcode, enum a6xx_state_type st,
    tu_cs_emit_qw(cs, offset | (base << 28));
 }
 
+/* Combined image/sampler arrays need two CP_LOAD_STATE6 packets per element
+ * (see tu6_emit_load_state()), and the packets are replayed every time the
+ * descriptor sets are re-emitted. The descriptor cache only holds a few
+ * dozen descriptors, so preloading a big bindless array mostly evicts itself
+ * while the CP spends a long time on the packets (~70 ns per element on a630,
+ * a 4096 element array costs ~0.3 ms per dispatch). Shaders indexing such an
+ * array dynamically also can't tell which elements they use. Don't preload
+ * arrays bigger than this.
+ */
+#define TU_MAX_PRELOAD_COMBINED_ARRAY_SIZE 32
+
+static bool
+tu6_skip_combined_preload(const struct tu_descriptor_set_binding_layout *binding)
+{
+   return (binding->type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
+           binding->type == VK_DESCRIPTOR_TYPE_BLOCK_MATCH_IMAGE_QCOM) &&
+          binding->array_size > TU_MAX_PRELOAD_COMBINED_ARRAY_SIZE;
+}
+
 static unsigned
 tu6_load_state_size(struct tu_pipeline *pipeline,
                     struct tu_pipeline_layout *layout)
@@ -71,7 +90,7 @@ tu6_load_state_size(struct tu_pipeline *pipeline,
          VkShaderStageFlags stages = pipeline->active_stages & binding->shader_stages;
          unsigned stage_count = util_bitcount(stages);
 
-         if (!binding->array_size)
+         if (!binding->array_size || tu6_skip_combined_preload(binding))
             continue;
 
          switch (binding->type) {
@@ -166,7 +185,7 @@ tu6_emit_load_state(struct tu_device *device,
              set_layout->has_variable_descriptors)
             continue;
 
-         if (count == 0 || stages == 0)
+         if (count == 0 || stages == 0 || tu6_skip_combined_preload(binding))
             continue;
          switch (binding->type) {
          case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
